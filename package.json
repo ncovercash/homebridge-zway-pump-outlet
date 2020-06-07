@@ -1,16 +1,16 @@
 {
-	"displayName": "Z-Way Schlage BE469",
-	"name": "homebridge-zway-schlage",
+	"displayName": "Z-Way Pump Outlet",
+	"name": "homebridge-zway-pump-outlet",
 	"author": "ncovercash",
-	"version": "1.1.1",
-	"description": "Learning experience to implement a z-way plugin for my home system with Schalge BE469's.",
+	"version": "1.0.0",
+	"description": "Exposes a smart outlet as an pump for a hydropoinc system.",
 	"license": "Apache-2.0",
 	"repository": {
 		"type": "git",
-		"url": "git://github.com/ncovercash/homebridge-zway-schlage-be469.git"
+		"url": "git://github.com/ncovercash/homebridge-zway-pump-outlet.git"
 	},
 	"bugs": {
-		"url": "https://github.com/ncovercash/homebridge-zway-schlage-be469/issues"
+		"url": "https://github.com/ncovercash/homebridge-zway-pump-outlet/issues"
 	},
 	"main": "dist/index.js",
 	"keywords": [

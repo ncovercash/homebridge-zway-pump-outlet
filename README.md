@@ -1,21 +1,19 @@
-# homebridge-zway-schlage-be469
+# homebridge-zway-pump-outlet
 
-A homebridge plugin to interact with a Z-Way server.  I mostly built this as a learning experience and found the existing Z-Way Homebridge plugin to not be quite what I was looking for.
+A homebridge plugin to interact with a Z-Way server.  As part of my hydroponics system, I wanted to be able to sense whether or not the pump had ran out of water based on the power flowing through a smart outlet.  Therefore, this exposes both Valve and Leak Sensor (for when out of water) services.
 
 ## My Setup
-In my personal usage, I used a [RaZberry](https://smile.amazon.com/dp/B01M3Q764U/) on a Pi I had laying around.  It worked quite well once I enrolled my devices in the Z-Way dashboard.
+In my personal usage, I used a [RaZberry](https://smile.amazon.com/dp/B01M3Q764U/) on a Pi I had laying around.
 
-I have two models: the newer BE469ZP and the older (regular?) BE469.  I'm not too sure what the defining characteristics are, however, the newer one has a dedicated Z-Wave enroll/unenroll button inside the cover and supports S2 Access.
-
-For some reason, I had lots of issues with BE469ZP's association/lifeline settings.  However, on the regular BE469 I have I was able to setup Niffler within the Z-Way server and polling was no longer needed.
+The switch I used was a Dome DMOF1 outlet and the pump a [Beckett 430 GPH Fountain Pump](https://www.homedepot.com/p/Beckett-430-GPH-Submersible-Fountain-Pump-M400HD/100083846).  I found that about 14 watts were used when the pump was in normal use and around 7 watts when it was running dry.
 
 ## Installation
-Install this plugin using `npm i -g homebridge-zway-schlage-be469`.
+Install this plugin using `npm i -g homebridge-zway-pump-outlet`.
 
 Update the `config.json` file of your Homebridge setup to support this platform as described in the [Configuration](#configuration) section.
 
 ## Updating
-Update to the latest release of this plugin using `npm i -g homebridge-zway-schlage-be469`.
+Update to the latest release of this plugin using `npm i -g homebridge-zway-pump-outlet`.
 
 ## Configurations
 Add the following to the Homebridge `config.json`:
@@ -26,12 +24,13 @@ Add the following to the Homebridge `config.json`:
     "platforms": [
         ...
         {
-            "platform": "schlage-be469",
+            "platform": "zway-pump-outlet",
             "host": "http://your.host.here:port/",
             "user": "admin",
             "pass": "your-password-here",
             "ignore": [ nodes, to, ignore ],
-            "toPoll": [ nodes, to, poll ]
+            "toPoll": [ nodes, to, poll ],
+            "thresholdWattage": 10
         }
         ...
     ]
@@ -45,3 +44,4 @@ Add the following to the Homebridge `config.json`:
 * `pass`: the password for the Z-Way instance
 * `ignore`: Schlage lock nodes to ignore
 * `toPoll`: nodes which should be polled for new information (e.g. association/lifeline is broken)
+* `thresholdWattage`: below this value is considered dry and above is considered normal.

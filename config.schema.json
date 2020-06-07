@@ -1,5 +1,5 @@
 {
-	"pluginAlias": "schlage-be469",
+	"pluginAlias": "zway-pump-outlet",
 	"pluginType": "platform",
 	"singular": true,
 	"schema": {
@@ -39,6 +39,12 @@
 					"type": "integer"
 				},
 				"required": false
+			},
+			"thresholdWattage": {
+				"title": "Threshold Wattage",
+				"type": "integer",
+				"default": 10,
+				"required": true
 			}
 		}
 	}

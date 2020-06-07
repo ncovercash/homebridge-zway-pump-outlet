@@ -1,28 +1,19 @@
 import { PlatformConfig } from "homebridge";
 
-export interface ZWaySchlageBe469Config extends PlatformConfig {
+export interface ZWayPumpOutletConfig extends PlatformConfig {
 	user: string;
 	pass: string;
 	host: string;
 	ignore: number[];
 	toPoll: number[];
+	thresholdWattage: number;
 	nuke?: any;
 }
 
-export interface Be469Device {
+export interface PumpOutlet {
 	nodeId: number;
-	commandClasses: {
-		configuration: { instance: number };
-		battery: { instance: number };
-		doorLock: { instance: number };
-	};
 	lastState: Device;
 }
-
-export const ConfigurationOptions: Record<string, number> = {
-	Beeper: 0x03,
-	VacationMode: 0x04,
-};
 
 export enum CommandClassIds {
 	NoOperation = "0",
@@ -174,22 +165,22 @@ export interface SpecialCommandClassIntermediate<N extends string, T extends str
 		};
 }
 
-export type ConfigurationCommandClass = SpecialCommandClassIntermediate<"Configuration", "3" | "4">;
-export type BatteryCommandClass = SpecialCommandClassIntermediate<"Battery", never>;
-export type DoorLockCommandClass = SpecialCommandClassIntermediate<
-	"DoorLock",
-	| "mode"
-	| "insideMode"
-	| "outsideMode"
-	| "lockMinutes"
-	| "lockSeconds"
-	| "condition"
-	| "insideState"
-	| "outsideState"
-	| "timeoutMinutes"
-	| "timeoutSeconds"
-	| "opType"
->;
+// export type ConfigurationCommandClass = SpecialCommandClassIntermediate<"Configuration", "3" | "4">;
+// export type BatteryCommandClass = SpecialCommandClassIntermediate<"Battery", never>;
+// export type DoorLockCommandClass = SpecialCommandClassIntermediate<
+// 	"DoorLock",
+// 	| "mode"
+// 	| "insideMode"
+// 	| "outsideMode"
+// 	| "lockMinutes"
+// 	| "lockSeconds"
+// 	| "condition"
+// 	| "insideState"
+// 	| "outsideState"
+// 	| "timeoutMinutes"
+// 	| "timeoutSeconds"
+// 	| "opType"
+// >;
 
 type DeviceDataKeys =
 	| "basicType"

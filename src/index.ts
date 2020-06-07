@@ -19,17 +19,14 @@ import {
 } from "homebridge";
 import {
 	APIValue,
-	Be469Device,
+	PumpOutlet,
 	CommandClassIds,
-	ConfigurationCommandClass,
-	ConfigurationOptions,
 	DataAPIReponse,
-	DoorLockCommandClass,
-	ZWaySchlageBe469Config,
+	ZWayPumpOutletConfig,
 } from "./types";
 
-const PLUGIN_NAME = "homebridge-zway-schlage-be469";
-const PLATFORM_NAME = "schlage-be469";
+const PLUGIN_NAME = "homebridge-zway-pump-outlet";
+const PLATFORM_NAME = "zway-pump-outlet";
 
 let hap: HAP;
 let Accessory: typeof PlatformAccessory;
@@ -38,19 +35,19 @@ export = (api: API) => {
 	hap = api.hap;
 	Accessory = api.platformAccessory;
 
-	api.registerPlatform(PLATFORM_NAME, ZWaySchlageBe469);
+	api.registerPlatform(PLATFORM_NAME, ZWayPumpOutlet);
 };
 
 // seconds
 const UPDATE_TOLERANCES = {
-	doorLock: 600,
-	battery: 86400, // 1 day
-	configuration: 86400,
+	// doorLock: 600,
+	// battery: 86400, // 1 day
+	// configuration: 86400,
 };
 
 const ANTI_STARTUP_FLOOD_COUNT = 120;
 
-class ZWaySchlageBe469 implements DynamicPlatformPlugin {
+class ZWayPumpOutlet implements DynamicPlatformPlugin {
 	protected readonly log: Logging;
 	protected readonly api: API;
 
@@ -65,10 +62,11 @@ class ZWaySchlageBe469 implements DynamicPlatformPlugin {
 		nuke: boolean;
 		ignore: number[];
 		toPoll: number[];
+		thresholdWattage: number;
 	};
 
 	protected session: string | null = null;
-	protected locks: Record<number, Be469Device> = {};
+	protected pumps: Record<number, PumpOutlet> = {};
 
 	protected pendingQueries: Record<string, number> = {};
 
@@ -79,18 +77,19 @@ class ZWaySchlageBe469 implements DynamicPlatformPlugin {
 		this.api = api;
 
 		this.config = {
-			host: (config as ZWaySchlageBe469Config).host,
-			user: (config as ZWaySchlageBe469Config).user,
-			pass: (config as ZWaySchlageBe469Config).pass,
-			nuke: (config as ZWaySchlageBe469Config).nuke !== undefined,
+			host: (config as ZWayPumpOutletConfig).host,
+			user: (config as ZWayPumpOutletConfig).user,
+			pass: (config as ZWayPumpOutletConfig).pass,
+			nuke: (config as ZWayPumpOutletConfig).nuke !== undefined,
 			ignore:
-				(config as ZWaySchlageBe469Config).ignore === undefined
+				(config as ZWayPumpOutletConfig).ignore === undefined
 					? []
-					: (config as ZWaySchlageBe469Config).ignore,
+					: (config as ZWayPumpOutletConfig).ignore,
 			toPoll:
-				(config as ZWaySchlageBe469Config).toPoll === undefined
+				(config as ZWayPumpOutletConfig).toPoll === undefined
 					? []
-					: (config as ZWaySchlageBe469Config).toPoll,
+					: (config as ZWayPumpOutletConfig).toPoll,
+			thresholdWattage: (config as ZWayPumpOutletConfig).thresholdWattage,
 		};
 
 		log.info("Finished initializing!");
@@ -106,7 +105,7 @@ class ZWaySchlageBe469 implements DynamicPlatformPlugin {
 
 			await this.initialContact();
 
-			let delta = diff.diff(Object.keys(this.accessories), Object.keys(this.locks));
+			let delta = diff.diff(Object.keys(this.accessories), Object.keys(this.pumps));
 			if (this.config.nuke) {
 				log.warn("NUKING");
 				delta = diff.diff(Object.keys(this.accessories), []);
@@ -120,39 +119,37 @@ class ZWaySchlageBe469 implements DynamicPlatformPlugin {
 					return;
 				}
 
-				this.log("Creating accessory for lock #" + nodeId);
+				this.log("Creating accessory for outlet #" + nodeId);
 
-				let name = this.locks[nodeId].lastState.data.givenName.value as string;
+				let name = this.pumps[nodeId].lastState.data.givenName.value as string;
 				if (name == "") {
-					this.log.warn(
-						"This lock does not have a name set in Z-Way.  Defaulting to Allegion Keypad",
-					);
-					name = "Allegion Keypad";
+					this.log.warn("This device does not have a name set in Z-Way.  Defaulting to Pump");
+					name = "Pump";
 				}
 
-				const uuid = hap.uuid.generate(nodeKey);
-				const accessory = new Accessory(name, uuid, Categories.DOOR_LOCK);
-				accessory.context.nodeId = nodeId;
-				accessory.context.battery = -1;
-				accessory.context.lastConfigurationUpdate = 0;
-				accessory.context.lastLockState = hap.Characteristic.LockTargetState.UNSECURED;
-				accessory.context.targetLockState = hap.Characteristic.LockTargetState.UNSECURED;
-				accessory.context.configurationOptions = {};
-				Object.keys(ConfigurationOptions).forEach((name) => {
-					accessory.context.configurationOptions[name] = 0;
-				});
+				// const uuid = hap.uuid.generate(nodeKey);
+				// const accessory = new Accessory(name, uuid, Categories.DOOR_LOCK);
+				// accessory.context.nodeId = nodeId;
+				// accessory.context.battery = -1;
+				// accessory.context.lastConfigurationUpdate = 0;
+				// accessory.context.lastLockState = hap.Characteristic.LockTargetState.UNSECURED;
+				// accessory.context.targetLockState = hap.Characteristic.LockTargetState.UNSECURED;
+				// accessory.context.configurationOptions = {};
+				// Object.keys(ConfigurationOptions).forEach((name) => {
+				// 	accessory.context.configurationOptions[name] = 0;
+				// });
 
-				accessory.addService(hap.Service.LockMechanism, name);
-				accessory.addService(hap.Service.LockManagement, name);
-				accessory.addService(hap.Service.BatteryService, "Battery");
+				// accessory.addService(hap.Service.LockMechanism, name);
+				// accessory.addService(hap.Service.LockManagement, name);
+				// accessory.addService(hap.Service.BatteryService, "Battery");
 
-				this.configureAccessory(accessory);
-				this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+				// this.configureAccessory(accessory);
+				// this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
 			});
 			delta.removed.forEach((nodeKey) => {
 				const nodeId = parseInt(nodeKey);
 
-				this.log("Lock #" + nodeId + " removed");
+				this.log("Pump #" + nodeId + " removed");
 
 				this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [
 					this.accessories[nodeId],
@@ -180,109 +177,109 @@ class ZWaySchlageBe469 implements DynamicPlatformPlugin {
 			this.log(`#${accessory.context.nodeId} identified!`);
 		});
 
-		const mechanismService = accessory.getService(hap.Service.LockMechanism)!;
-		mechanismService
-			.getCharacteristic(hap.Characteristic.LockCurrentState)
-			.on(CharacteristicEventTypes.GET, (callback: CharacteristicGetCallback) => {
-				callback(null, accessory.context.lastLockState);
-			});
-		mechanismService
-			.getCharacteristic(hap.Characteristic.LockTargetState)
-			.on(CharacteristicEventTypes.GET, (callback: CharacteristicGetCallback) => {
-				callback(null, accessory.context.targetLockState);
-			})
-			.on(
-				CharacteristicEventTypes.SET,
-				(value: CharacteristicValue, callback: CharacteristicSetCallback) => {
-					accessory.context.targetLockState = value;
+		// const mechanismService = accessory.getService(hap.Service.LockMechanism)!;
+		// mechanismService
+		// 	.getCharacteristic(hap.Characteristic.LockCurrentState)
+		// 	.on(CharacteristicEventTypes.GET, (callback: CharacteristicGetCallback) => {
+		// 		callback(null, accessory.context.lastLockState);
+		// 	});
+		// mechanismService
+		// 	.getCharacteristic(hap.Characteristic.LockTargetState)
+		// 	.on(CharacteristicEventTypes.GET, (callback: CharacteristicGetCallback) => {
+		// 		callback(null, accessory.context.targetLockState);
+		// 	})
+		// 	.on(
+		// 		CharacteristicEventTypes.SET,
+		// 		(value: CharacteristicValue, callback: CharacteristicSetCallback) => {
+		// 			accessory.context.targetLockState = value;
 
-					let zWaveSet;
-					if (value == hap.Characteristic.LockTargetState.SECURED) {
-						zWaveSet = 255;
-					} else {
-						zWaveSet = 0;
-					}
-					this.log("Setting #" + accessory.context.nodeId + " to " + zWaveSet);
-					this.makeRequest(
-						"POST",
-						"Run/devices[" +
-							accessory.context.nodeId +
-							"].instances[" +
-							this.locks[accessory.context.nodeId].commandClasses.doorLock.instance +
-							"].commandClasses[" +
-							CommandClassIds.DoorLock +
-							"].Set(" +
-							zWaveSet +
-							")",
-						{},
-						"ZWave.zway",
-					);
-					callback(null, value);
-				},
-			);
+		// 			let zWaveSet;
+		// 			if (value == hap.Characteristic.LockTargetState.SECURED) {
+		// 				zWaveSet = 255;
+		// 			} else {
+		// 				zWaveSet = 0;
+		// 			}
+		// 			this.log("Setting #" + accessory.context.nodeId + " to " + zWaveSet);
+		// 			this.makeRequest(
+		// 				"POST",
+		// 				"Run/devices[" +
+		// 					accessory.context.nodeId +
+		// 					"].instances[" +
+		// 					this.pumps[accessory.context.nodeId].commandClasses.doorLock.instance +
+		// 					"].commandClasses[" +
+		// 					CommandClassIds.DoorLock +
+		// 					"].Set(" +
+		// 					zWaveSet +
+		// 					")",
+		// 				{},
+		// 				"ZWave.zway",
+		// 			);
+		// 			callback(null, value);
+		// 		},
+		// 	);
 
-		const managementService = accessory.getService(hap.Service.LockManagement)!;
-		managementService
-			.getCharacteristic(hap.Characteristic.LockControlPoint)
-			.on(
-				CharacteristicEventTypes.SET,
-				(value: CharacteristicValue, callback: CharacteristicSetCallback) => {
-					this.log.info("Tried writing to management service: " + value);
-					callback(new Error("Does nothing"));
-				},
-			);
-		managementService
-			.getCharacteristic(hap.Characteristic.Version)
-			.updateValue("1.0")
-			.on(CharacteristicEventTypes.GET, (callback: CharacteristicGetCallback) => {
-				callback(null, "1.0");
-			});
-		managementService
-			.getCharacteristic(hap.Characteristic.AudioFeedback)
-			.on(CharacteristicEventTypes.GET, (callback: CharacteristicGetCallback) => {
-				callback(null, accessory.context.configurationOptions.Beeper);
-			})
-			.on(
-				CharacteristicEventTypes.SET,
-				(value: CharacteristicValue, callback: CharacteristicSetCallback) => {
-					const param = value
-						? "" + ConfigurationOptions.Beeper + ",255,0"
-						: "" + ConfigurationOptions.Beeper + ",0,0";
-					this.makeRequest(
-						"POST",
-						"Run/devices[" +
-							accessory.context.nodeId +
-							"].instances[" +
-							this.locks[accessory.context.nodeId].commandClasses.configuration.instance +
-							"].commandClasses[" +
-							CommandClassIds.Configuration +
-							"].Set(" +
-							param +
-							")",
-						{},
-						"ZWave.zway",
-					);
-					callback(null, value);
-				},
-			);
+		// const managementService = accessory.getService(hap.Service.LockManagement)!;
+		// managementService
+		// 	.getCharacteristic(hap.Characteristic.LockControlPoint)
+		// 	.on(
+		// 		CharacteristicEventTypes.SET,
+		// 		(value: CharacteristicValue, callback: CharacteristicSetCallback) => {
+		// 			this.log.info("Tried writing to management service: " + value);
+		// 			callback(new Error("Does nothing"));
+		// 		},
+		// 	);
+		// managementService
+		// 	.getCharacteristic(hap.Characteristic.Version)
+		// 	.updateValue("1.0")
+		// 	.on(CharacteristicEventTypes.GET, (callback: CharacteristicGetCallback) => {
+		// 		callback(null, "1.0");
+		// 	});
+		// managementService
+		// 	.getCharacteristic(hap.Characteristic.AudioFeedback)
+		// 	.on(CharacteristicEventTypes.GET, (callback: CharacteristicGetCallback) => {
+		// 		callback(null, accessory.context.configurationOptions.Beeper);
+		// 	})
+		// 	.on(
+		// 		CharacteristicEventTypes.SET,
+		// 		(value: CharacteristicValue, callback: CharacteristicSetCallback) => {
+		// 			const param = value
+		// 				? "" + ConfigurationOptions.Beeper + ",255,0"
+		// 				: "" + ConfigurationOptions.Beeper + ",0,0";
+		// 			this.makeRequest(
+		// 				"POST",
+		// 				"Run/devices[" +
+		// 					accessory.context.nodeId +
+		// 					"].instances[" +
+		// 					this.pumps[accessory.context.nodeId].commandClasses.configuration.instance +
+		// 					"].commandClasses[" +
+		// 					CommandClassIds.Configuration +
+		// 					"].Set(" +
+		// 					param +
+		// 					")",
+		// 				{},
+		// 				"ZWave.zway",
+		// 			);
+		// 			callback(null, value);
+		// 		},
+		// 	);
 
-		const batteryService = accessory.getService(hap.Service.BatteryService)!;
-		batteryService
-			.getCharacteristic(hap.Characteristic.BatteryLevel)
-			.on(CharacteristicEventTypes.GET, (callback: CharacteristicGetCallback) => {
-				callback(null, accessory.context.battery);
-			});
-		batteryService
-			.getCharacteristic(hap.Characteristic.ChargingState)
-			.on(CharacteristicEventTypes.GET, (callback: CharacteristicGetCallback) => {
-				callback(null, hap.Characteristic.ChargingState.NOT_CHARGEABLE);
-			})
-			.updateValue(hap.Characteristic.ChargingState.NOT_CHARGEABLE);
-		batteryService
-			.getCharacteristic(hap.Characteristic.StatusLowBattery)
-			.on(CharacteristicEventTypes.GET, (callback: CharacteristicGetCallback) => {
-				callback(null, accessory.context.battery <= 60);
-			});
+		// const batteryService = accessory.getService(hap.Service.BatteryService)!;
+		// batteryService
+		// 	.getCharacteristic(hap.Characteristic.BatteryLevel)
+		// 	.on(CharacteristicEventTypes.GET, (callback: CharacteristicGetCallback) => {
+		// 		callback(null, accessory.context.battery);
+		// 	});
+		// batteryService
+		// 	.getCharacteristic(hap.Characteristic.ChargingState)
+		// 	.on(CharacteristicEventTypes.GET, (callback: CharacteristicGetCallback) => {
+		// 		callback(null, hap.Characteristic.ChargingState.NOT_CHARGEABLE);
+		// 	})
+		// 	.updateValue(hap.Characteristic.ChargingState.NOT_CHARGEABLE);
+		// batteryService
+		// 	.getCharacteristic(hap.Characteristic.StatusLowBattery)
+		// 	.on(CharacteristicEventTypes.GET, (callback: CharacteristicGetCallback) => {
+		// 		callback(null, accessory.context.battery <= 60);
+		// 	});
 
 		this.accessories[accessory.context.nodeId] = accessory;
 	}
@@ -310,46 +307,20 @@ class ZWaySchlageBe469 implements DynamicPlatformPlugin {
 			}
 
 			if (
-				device.data.vendorString.value == "Allegion" &&
-				device.data.deviceTypeString.value == "Secure Keypad"
+				device.data.vendorString.value == "Elexa Consumer Products Inc." &&
+				device.data.deviceTypeString.value == "Binary Power Switch"
 			) {
-				this.log("Identified this as a lock to be served by this platform");
+				this.log("Identified this as an outlet to be served by this platform");
 			} else {
 				return;
 			}
 
-			const lock: Be469Device = {
+			const pump: PumpOutlet = {
 				nodeId: parseInt(nodeId),
-				commandClasses: {
-					configuration: { instance: 0 },
-					battery: { instance: 0 },
-					doorLock: { instance: 0 },
-				},
 				lastState: device,
 			};
 
-			Object.keys(device.instances).forEach((instanceId) => {
-				const instance = device.instances[instanceId];
-				Object.keys(instance.commandClasses).forEach((commandClassId) => {
-					const commandClass = instance.commandClasses[commandClassId as CommandClassIds]!;
-					switch (commandClassId as CommandClassIds) {
-						case CommandClassIds.Configuration:
-							lock.commandClasses.configuration.instance = parseInt(instanceId);
-							this.log(`  -- Found relevant command class [${instanceId}] ${commandClass.name}`);
-							break;
-						case CommandClassIds.Battery:
-							lock.commandClasses.battery.instance = parseInt(instanceId);
-							this.log(`  -- Found relevant command class [${instanceId}] ${commandClass.name}`);
-							break;
-						case CommandClassIds.DoorLock:
-							lock.commandClasses.doorLock.instance = parseInt(instanceId);
-							this.log(`  -- Found relevant command class [${instanceId}] ${commandClass.name}`);
-							break;
-					}
-				});
-			});
-
-			this.locks[parseInt(nodeId)] = lock;
+			this.pumps[parseInt(nodeId)] = pump;
 		});
 	}
 
@@ -490,64 +461,56 @@ class ZWaySchlageBe469 implements DynamicPlatformPlugin {
 		}
 	}
 
-	protected toLockStateCharacteristic(value: APIValue): number {
-		if (value.value == 0) {
-			return hap.Characteristic.LockCurrentState.UNSECURED;
-		} else {
-			return hap.Characteristic.LockCurrentState.SECURED;
-		}
-	}
-
 	protected updateValues(): void {
 		Object.values(this.accessories).forEach((accessory) => {
-			const lock = this.locks[accessory.context.nodeId];
-			const mechanismService = accessory.getService(hap.Service.LockMechanism)!;
+			const pump = this.pumps[accessory.context.nodeId];
+			// const mechanismService = accessory.getService(hap.Service.LockMechanism)!;
 
-			const classes =
-				lock.lastState.instances[lock.commandClasses.doorLock.instance].commandClasses;
-			const doorLockClass = classes[CommandClassIds.DoorLock]! as DoorLockCommandClass;
+			// const classes =
+			// 	lock.lastState.instances[lock.commandClasses.doorLock.instance].commandClasses;
+			// const doorLockClass = classes[CommandClassIds.DoorLock]! as DoorLockCommandClass;
 
-			// lock changed states
-			if (
-				accessory.context.lastLockState != this.toLockStateCharacteristic(doorLockClass.data.mode)
-			) {
-				this.log("Lock " + accessory.displayName + " changed states!");
-				accessory.context.lastLockState = this.toLockStateCharacteristic(doorLockClass.data.mode);
-				accessory.context.targetLockState = this.toLockStateCharacteristic(doorLockClass.data.mode);
-			}
-			mechanismService
-				.getCharacteristic(hap.Characteristic.LockCurrentState)
-				.updateValue(accessory.context.lastLockState);
-			mechanismService
-				.getCharacteristic(hap.Characteristic.LockTargetState)
-				.updateValue(accessory.context.targetLockState);
+			// // lock changed states
+			// if (
+			// 	accessory.context.lastLockState != this.toLockStateCharacteristic(doorLockClass.data.mode)
+			// ) {
+			// 	this.log("Lock " + accessory.displayName + " changed states!");
+			// 	accessory.context.lastLockState = this.toLockStateCharacteristic(doorLockClass.data.mode);
+			// 	accessory.context.targetLockState = this.toLockStateCharacteristic(doorLockClass.data.mode);
+			// }
+			// mechanismService
+			// 	.getCharacteristic(hap.Characteristic.LockCurrentState)
+			// 	.updateValue(accessory.context.lastLockState);
+			// mechanismService
+			// 	.getCharacteristic(hap.Characteristic.LockTargetState)
+			// 	.updateValue(accessory.context.targetLockState);
 
-			const managementService = accessory.getService(hap.Service.LockManagement)!;
+			// const managementService = accessory.getService(hap.Service.LockManagement)!;
 
-			const configurationClass = classes[CommandClassIds.DoorLock]! as ConfigurationCommandClass;
-			if (configurationClass.data["3"] !== undefined) {
-				accessory.context.configurationOptions.Beeper = configurationClass.data["3"].value == 255;
-				managementService
-					.getCharacteristic(hap.Characteristic.AudioFeedback)
-					.updateValue(accessory.context.configurationOptions.Beeper);
-			}
+			// const configurationClass = classes[CommandClassIds.DoorLock]! as ConfigurationCommandClass;
+			// if (configurationClass.data["3"] !== undefined) {
+			// 	accessory.context.configurationOptions.Beeper = configurationClass.data["3"].value == 255;
+			// 	managementService
+			// 		.getCharacteristic(hap.Characteristic.AudioFeedback)
+			// 		.updateValue(accessory.context.configurationOptions.Beeper);
+			// }
 
-			// not user-accessible as it resets the code length
-			// which locks everyone out even after it is disabled
-			if (configurationClass.data["4"] !== undefined) {
-				accessory.context.configurationOptions.VacationMode =
-					configurationClass.data["4"].value == 255;
-			}
+			// // not user-accessible as it resets the code length
+			// // which locks everyone out even after it is disabled
+			// if (configurationClass.data["4"] !== undefined) {
+			// 	accessory.context.configurationOptions.VacationMode =
+			// 		configurationClass.data["4"].value == 255;
+			// }
 
-			accessory.context.battery = classes[CommandClassIds.Battery]!.data.last.value;
+			// accessory.context.battery = classes[CommandClassIds.Battery]!.data.last.value;
 
-			const batteryService = accessory.getService(hap.Service.BatteryService)!;
-			batteryService
-				.getCharacteristic(hap.Characteristic.BatteryLevel)
-				.updateValue(accessory.context.battery);
-			batteryService
-				.getCharacteristic(hap.Characteristic.StatusLowBattery)
-				.updateValue(accessory.context.battery <= 60);
+			// const batteryService = accessory.getService(hap.Service.BatteryService)!;
+			// batteryService
+			// 	.getCharacteristic(hap.Characteristic.BatteryLevel)
+			// 	.updateValue(accessory.context.battery);
+			// batteryService
+			// 	.getCharacteristic(hap.Characteristic.StatusLowBattery)
+			// 	.updateValue(accessory.context.battery <= 60);
 		});
 	}
 
@@ -561,8 +524,8 @@ class ZWaySchlageBe469 implements DynamicPlatformPlugin {
 
 		const response = await this.getData();
 
-		Object.keys(this.locks).forEach((nodeKey) => {
-			this.locks[parseInt(nodeKey)].lastState = response.data.devices[nodeKey];
+		Object.keys(this.pumps).forEach((nodeKey) => {
+			this.pumps[parseInt(nodeKey)].lastState = response.data.devices[nodeKey];
 		});
 
 		const requestsToDispatch: {
@@ -575,48 +538,48 @@ class ZWaySchlageBe469 implements DynamicPlatformPlugin {
 
 		const currentTime = response.data.updateTime;
 
-		Object.values(this.locks).forEach((lock) => {
-			if (!this.config.toPoll.includes(lock.nodeId)) {
+		Object.values(this.pumps).forEach((pump) => {
+			if (!this.config.toPoll.includes(pump.nodeId)) {
 				return;
 			}
-			if (
-				currentTime - this.accessories[lock.nodeId].context.lastConfigurationUpdate >
-				UPDATE_TOLERANCES.configuration
-			) {
-				Object.keys(ConfigurationOptions).forEach((name) => {
-					requestsToDispatch.push({
-						device: lock.nodeId,
-						instance: lock.commandClasses.configuration.instance,
-						commandClass: parseInt(CommandClassIds.Configuration as string),
-						time: this.accessories[lock.nodeId].context.lastConfigurationUpdate,
-						param: ConfigurationOptions[name].toString(),
-					});
-				});
-				this.accessories[lock.nodeId].context.lastConfigurationUpdate = currentTime;
-			}
-			const batteryTime = lock.lastState.instances[lock.commandClasses.battery.instance]
-				.commandClasses[CommandClassIds.Battery]!;
-			if (currentTime - batteryTime.data.last.updateTime > UPDATE_TOLERANCES.battery) {
-				requestsToDispatch.push({
-					device: lock.nodeId,
-					instance: lock.commandClasses.battery.instance,
-					commandClass: parseInt(CommandClassIds.Battery as string),
-					time: batteryTime.data.last.updateTime,
-					param: "",
-				});
-			}
+			// if (
+			// 	currentTime - this.accessories[lock.nodeId].context.lastConfigurationUpdate >
+			// 	UPDATE_TOLERANCES.configuration
+			// ) {
+			// 	Object.keys(ConfigurationOptions).forEach((name) => {
+			// 		requestsToDispatch.push({
+			// 			device: lock.nodeId,
+			// 			instance: lock.commandClasses.configuration.instance,
+			// 			commandClass: parseInt(CommandClassIds.Configuration as string),
+			// 			time: this.accessories[lock.nodeId].context.lastConfigurationUpdate,
+			// 			param: ConfigurationOptions[name].toString(),
+			// 		});
+			// 	});
+			// 	this.accessories[lock.nodeId].context.lastConfigurationUpdate = currentTime;
+			// }
+			// const batteryTime = lock.lastState.instances[lock.commandClasses.battery.instance]
+			// 	.commandClasses[CommandClassIds.Battery]!;
+			// if (currentTime - batteryTime.data.last.updateTime > UPDATE_TOLERANCES.battery) {
+			// 	requestsToDispatch.push({
+			// 		device: lock.nodeId,
+			// 		instance: lock.commandClasses.battery.instance,
+			// 		commandClass: parseInt(CommandClassIds.Battery as string),
+			// 		time: batteryTime.data.last.updateTime,
+			// 		param: "",
+			// 	});
+			// }
 
-			const lockTime = lock.lastState.instances[lock.commandClasses.doorLock.instance]
-				.commandClasses[CommandClassIds.DoorLock]! as DoorLockCommandClass;
-			if (currentTime - lockTime.data.mode.updateTime > UPDATE_TOLERANCES.doorLock) {
-				requestsToDispatch.push({
-					device: lock.nodeId,
-					instance: lock.commandClasses.doorLock.instance,
-					commandClass: parseInt(CommandClassIds.DoorLock as string),
-					time: lockTime.data.mode.updateTime,
-					param: "",
-				});
-			}
+			// const lockTime = lock.lastState.instances[lock.commandClasses.doorLock.instance]
+			// 	.commandClasses[CommandClassIds.DoorLock]! as DoorLockCommandClass;
+			// if (currentTime - lockTime.data.mode.updateTime > UPDATE_TOLERANCES.doorLock) {
+			// 	requestsToDispatch.push({
+			// 		device: lock.nodeId,
+			// 		instance: lock.commandClasses.doorLock.instance,
+			// 		commandClass: parseInt(CommandClassIds.DoorLock as string),
+			// 		time: lockTime.data.mode.updateTime,
+			// 		param: "",
+			// 	});
+			// }
 		});
 
 		requestsToDispatch.forEach((request) => {
