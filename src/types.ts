@@ -132,6 +132,7 @@ export type APIValue =
 	| TypedAPIValue<"bool", boolean>
 	| TypedAPIValue<"empty", null>
 	| TypedAPIValue<"int", number>
+	| TypedAPIValue<"float", number>
 	| TypedAPIValue<"string", string>;
 
 // From /ZWaveAPI/Data/0
@@ -156,31 +157,28 @@ export interface CommandClass {
 	data: CommandClassData;
 }
 
-export interface SpecialCommandClassIntermediate<N extends string, T extends string>
-	extends CommandClass {
-	name: N;
-	data: CommandClassData &
-		{
-			[index in T]: APIValue;
-		};
+export interface SwitchBinaryCommandClass extends CommandClass {
+	name: "SwitchBinary";
+	data: CommandClassData & {
+		level: APIValue;
+	};
 }
 
-// export type ConfigurationCommandClass = SpecialCommandClassIntermediate<"Configuration", "3" | "4">;
-// export type BatteryCommandClass = SpecialCommandClassIntermediate<"Battery", never>;
-// export type DoorLockCommandClass = SpecialCommandClassIntermediate<
-// 	"DoorLock",
-// 	| "mode"
-// 	| "insideMode"
-// 	| "outsideMode"
-// 	| "lockMinutes"
-// 	| "lockSeconds"
-// 	| "condition"
-// 	| "insideState"
-// 	| "outsideState"
-// 	| "timeoutMinutes"
-// 	| "timeoutSeconds"
-// 	| "opType"
-// >;
+export interface MeterCommandClass extends CommandClass {
+	name: "Meter";
+	data: CommandClassData & {
+		2: {
+			sensorType: TypedAPIValue<"int", number>;
+			sensorTypeString: TypedAPIValue<"string", string>;
+			val: TypedAPIValue<"float", number>; // what we care about
+			scale: TypedAPIValue<"int", number>;
+			scaleString: TypedAPIValue<"string", "W">; // what we care about
+			ratetype: TypedAPIValue<"int", number>;
+			delta: TypedAPIValue<"float", number>; // in seconds since last reading
+			previous: TypedAPIValue<"float", number>;
+		};
+	};
+}
 
 type DeviceDataKeys =
 	| "basicType"

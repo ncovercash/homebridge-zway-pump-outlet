@@ -19,9 +19,11 @@ import {
 } from "homebridge";
 import {
 	APIValue,
-	PumpOutlet,
 	CommandClassIds,
 	DataAPIReponse,
+	MeterCommandClass,
+	PumpOutlet,
+	SwitchBinaryCommandClass,
 	ZWayPumpOutletConfig,
 } from "./types";
 
@@ -36,13 +38,6 @@ export = (api: API) => {
 	Accessory = api.platformAccessory;
 
 	api.registerPlatform(PLATFORM_NAME, ZWayPumpOutlet);
-};
-
-// seconds
-const UPDATE_TOLERANCES = {
-	// doorLock: 600,
-	// battery: 86400, // 1 day
-	// configuration: 86400,
 };
 
 const ANTI_STARTUP_FLOOD_COUNT = 120;
@@ -127,24 +122,18 @@ class ZWayPumpOutlet implements DynamicPlatformPlugin {
 					name = "Pump";
 				}
 
-				// const uuid = hap.uuid.generate(nodeKey);
-				// const accessory = new Accessory(name, uuid, Categories.DOOR_LOCK);
-				// accessory.context.nodeId = nodeId;
-				// accessory.context.battery = -1;
-				// accessory.context.lastConfigurationUpdate = 0;
-				// accessory.context.lastLockState = hap.Characteristic.LockTargetState.UNSECURED;
-				// accessory.context.targetLockState = hap.Characteristic.LockTargetState.UNSECURED;
-				// accessory.context.configurationOptions = {};
-				// Object.keys(ConfigurationOptions).forEach((name) => {
-				// 	accessory.context.configurationOptions[name] = 0;
-				// });
+				const uuid = hap.uuid.generate(nodeKey);
+				const accessory = new Accessory(name, uuid, Categories.FAUCET);
+				accessory.context.nodeId = nodeId;
+				accessory.context.isOn = false;
+				accessory.context.isEmpty = false;
+				accessory.context.lastPowerChange = 0;
 
-				// accessory.addService(hap.Service.LockMechanism, name);
-				// accessory.addService(hap.Service.LockManagement, name);
-				// accessory.addService(hap.Service.BatteryService, "Battery");
+				accessory.addService(hap.Service.Valve, name);
+				accessory.addService(hap.Service.LeakSensor, name);
 
-				// this.configureAccessory(accessory);
-				// this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+				this.configureAccessory(accessory);
+				this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
 			});
 			delta.removed.forEach((nodeKey) => {
 				const nodeId = parseInt(nodeKey);
@@ -177,109 +166,50 @@ class ZWayPumpOutlet implements DynamicPlatformPlugin {
 			this.log(`#${accessory.context.nodeId} identified!`);
 		});
 
-		// const mechanismService = accessory.getService(hap.Service.LockMechanism)!;
-		// mechanismService
-		// 	.getCharacteristic(hap.Characteristic.LockCurrentState)
-		// 	.on(CharacteristicEventTypes.GET, (callback: CharacteristicGetCallback) => {
-		// 		callback(null, accessory.context.lastLockState);
-		// 	});
-		// mechanismService
-		// 	.getCharacteristic(hap.Characteristic.LockTargetState)
-		// 	.on(CharacteristicEventTypes.GET, (callback: CharacteristicGetCallback) => {
-		// 		callback(null, accessory.context.targetLockState);
-		// 	})
-		// 	.on(
-		// 		CharacteristicEventTypes.SET,
-		// 		(value: CharacteristicValue, callback: CharacteristicSetCallback) => {
-		// 			accessory.context.targetLockState = value;
+		const valveService = accessory.getService(hap.Service.Valve)!;
+		valveService
+			.getCharacteristic(hap.Characteristic.Active)
+			.on(CharacteristicEventTypes.GET, (callback: CharacteristicGetCallback) => {
+				callback(null, accessory.context.isOn);
+			})
+			.on(
+				CharacteristicEventTypes.SET,
+				(value: CharacteristicValue, callback: CharacteristicSetCallback) => {
+					this.log("Setting #" + accessory.context.nodeId + " to " + value);
+					accessory.context.lastPowerChange = new Date().getTime();
+					this.makeRequest(
+						"POST",
+						"Run/devices[" +
+							accessory.context.nodeId +
+							"].instances[0].commandClasses[" +
+							CommandClassIds.SwitchBinary +
+							"].Set(" +
+							(value ? 255 : 0) +
+							")",
+						{},
+						"ZWave.zway",
+					);
+					callback(null, value);
+				},
+			);
+		valveService
+			.getCharacteristic(hap.Characteristic.InUse)
+			.on(CharacteristicEventTypes.GET, (callback: CharacteristicGetCallback) => {
+				callback(null, accessory.context.isOn);
+			});
+		valveService
+			.getCharacteristic(hap.Characteristic.ValveType)
+			.on(CharacteristicEventTypes.GET, (callback: CharacteristicGetCallback) => {
+				callback(null, 0); // generic
+			})
+			.updateValue(0);
 
-		// 			let zWaveSet;
-		// 			if (value == hap.Characteristic.LockTargetState.SECURED) {
-		// 				zWaveSet = 255;
-		// 			} else {
-		// 				zWaveSet = 0;
-		// 			}
-		// 			this.log("Setting #" + accessory.context.nodeId + " to " + zWaveSet);
-		// 			this.makeRequest(
-		// 				"POST",
-		// 				"Run/devices[" +
-		// 					accessory.context.nodeId +
-		// 					"].instances[" +
-		// 					this.pumps[accessory.context.nodeId].commandClasses.doorLock.instance +
-		// 					"].commandClasses[" +
-		// 					CommandClassIds.DoorLock +
-		// 					"].Set(" +
-		// 					zWaveSet +
-		// 					")",
-		// 				{},
-		// 				"ZWave.zway",
-		// 			);
-		// 			callback(null, value);
-		// 		},
-		// 	);
-
-		// const managementService = accessory.getService(hap.Service.LockManagement)!;
-		// managementService
-		// 	.getCharacteristic(hap.Characteristic.LockControlPoint)
-		// 	.on(
-		// 		CharacteristicEventTypes.SET,
-		// 		(value: CharacteristicValue, callback: CharacteristicSetCallback) => {
-		// 			this.log.info("Tried writing to management service: " + value);
-		// 			callback(new Error("Does nothing"));
-		// 		},
-		// 	);
-		// managementService
-		// 	.getCharacteristic(hap.Characteristic.Version)
-		// 	.updateValue("1.0")
-		// 	.on(CharacteristicEventTypes.GET, (callback: CharacteristicGetCallback) => {
-		// 		callback(null, "1.0");
-		// 	});
-		// managementService
-		// 	.getCharacteristic(hap.Characteristic.AudioFeedback)
-		// 	.on(CharacteristicEventTypes.GET, (callback: CharacteristicGetCallback) => {
-		// 		callback(null, accessory.context.configurationOptions.Beeper);
-		// 	})
-		// 	.on(
-		// 		CharacteristicEventTypes.SET,
-		// 		(value: CharacteristicValue, callback: CharacteristicSetCallback) => {
-		// 			const param = value
-		// 				? "" + ConfigurationOptions.Beeper + ",255,0"
-		// 				: "" + ConfigurationOptions.Beeper + ",0,0";
-		// 			this.makeRequest(
-		// 				"POST",
-		// 				"Run/devices[" +
-		// 					accessory.context.nodeId +
-		// 					"].instances[" +
-		// 					this.pumps[accessory.context.nodeId].commandClasses.configuration.instance +
-		// 					"].commandClasses[" +
-		// 					CommandClassIds.Configuration +
-		// 					"].Set(" +
-		// 					param +
-		// 					")",
-		// 				{},
-		// 				"ZWave.zway",
-		// 			);
-		// 			callback(null, value);
-		// 		},
-		// 	);
-
-		// const batteryService = accessory.getService(hap.Service.BatteryService)!;
-		// batteryService
-		// 	.getCharacteristic(hap.Characteristic.BatteryLevel)
-		// 	.on(CharacteristicEventTypes.GET, (callback: CharacteristicGetCallback) => {
-		// 		callback(null, accessory.context.battery);
-		// 	});
-		// batteryService
-		// 	.getCharacteristic(hap.Characteristic.ChargingState)
-		// 	.on(CharacteristicEventTypes.GET, (callback: CharacteristicGetCallback) => {
-		// 		callback(null, hap.Characteristic.ChargingState.NOT_CHARGEABLE);
-		// 	})
-		// 	.updateValue(hap.Characteristic.ChargingState.NOT_CHARGEABLE);
-		// batteryService
-		// 	.getCharacteristic(hap.Characteristic.StatusLowBattery)
-		// 	.on(CharacteristicEventTypes.GET, (callback: CharacteristicGetCallback) => {
-		// 		callback(null, accessory.context.battery <= 60);
-		// 	});
+		const leakSensorService = accessory.getService(hap.Service.LeakSensor)!;
+		leakSensorService
+			.getCharacteristic(hap.Characteristic.LeakDetected)
+			.on(CharacteristicEventTypes.GET, (callback: CharacteristicSetCallback) => {
+				callback(null, accessory.context.isEmpty);
+			});
 
 		this.accessories[accessory.context.nodeId] = accessory;
 	}
@@ -464,53 +394,48 @@ class ZWayPumpOutlet implements DynamicPlatformPlugin {
 	protected updateValues(): void {
 		Object.values(this.accessories).forEach((accessory) => {
 			const pump = this.pumps[accessory.context.nodeId];
-			// const mechanismService = accessory.getService(hap.Service.LockMechanism)!;
+			const valveService = accessory.getService(hap.Service.Valve)!;
+			const leakSensorService = accessory.getService(hap.Service.LeakSensor)!;
 
-			// const classes =
-			// 	lock.lastState.instances[lock.commandClasses.doorLock.instance].commandClasses;
-			// const doorLockClass = classes[CommandClassIds.DoorLock]! as DoorLockCommandClass;
+			const classes = pump.lastState.instances[0].commandClasses;
+			const switchClass = classes[CommandClassIds.SwitchBinary]! as SwitchBinaryCommandClass;
+			const meterClass = classes[CommandClassIds.Meter]! as MeterCommandClass;
 
-			// // lock changed states
-			// if (
-			// 	accessory.context.lastLockState != this.toLockStateCharacteristic(doorLockClass.data.mode)
-			// ) {
-			// 	this.log("Lock " + accessory.displayName + " changed states!");
-			// 	accessory.context.lastLockState = this.toLockStateCharacteristic(doorLockClass.data.mode);
-			// 	accessory.context.targetLockState = this.toLockStateCharacteristic(doorLockClass.data.mode);
-			// }
-			// mechanismService
-			// 	.getCharacteristic(hap.Characteristic.LockCurrentState)
-			// 	.updateValue(accessory.context.lastLockState);
-			// mechanismService
-			// 	.getCharacteristic(hap.Characteristic.LockTargetState)
-			// 	.updateValue(accessory.context.targetLockState);
+			// power is on
+			if (switchClass.data.level.value) {
+				accessory.context.isOn = switchClass.data.level.value;
 
-			// const managementService = accessory.getService(hap.Service.LockManagement)!;
+				if (new Date().getTime() - accessory.context.lastPowerChange < 30000) {
+					this.log.info("Waiting to trigger empty so switch state power can propogate");
+					accessory.context.isEmpty = false;
+				} else {
+					accessory.context.isEmpty = meterClass.data[2].val.value < this.config.thresholdWattage;
+				}
+			} else {
+				accessory.context.isOn = switchClass.data.level.value;
+			}
+			valveService.getCharacteristic(hap.Characteristic.Active).updateValue(accessory.context.isOn);
+			valveService.getCharacteristic(hap.Characteristic.InUse).updateValue(accessory.context.isOn);
+			leakSensorService
+				.getCharacteristic(hap.Characteristic.LeakDetected)
+				.updateValue(accessory.context.isEmpty);
 
-			// const configurationClass = classes[CommandClassIds.DoorLock]! as ConfigurationCommandClass;
-			// if (configurationClass.data["3"] !== undefined) {
-			// 	accessory.context.configurationOptions.Beeper = configurationClass.data["3"].value == 255;
-			// 	managementService
-			// 		.getCharacteristic(hap.Characteristic.AudioFeedback)
-			// 		.updateValue(accessory.context.configurationOptions.Beeper);
-			// }
-
-			// // not user-accessible as it resets the code length
-			// // which locks everyone out even after it is disabled
-			// if (configurationClass.data["4"] !== undefined) {
-			// 	accessory.context.configurationOptions.VacationMode =
-			// 		configurationClass.data["4"].value == 255;
-			// }
-
-			// accessory.context.battery = classes[CommandClassIds.Battery]!.data.last.value;
-
-			// const batteryService = accessory.getService(hap.Service.BatteryService)!;
-			// batteryService
-			// 	.getCharacteristic(hap.Characteristic.BatteryLevel)
-			// 	.updateValue(accessory.context.battery);
-			// batteryService
-			// 	.getCharacteristic(hap.Characteristic.StatusLowBattery)
-			// 	.updateValue(accessory.context.battery <= 60);
+			if (accessory.context.isOn && accessory.context.isEmpty) {
+				this.log.warn("Shutting off " + accessory.context.nodeId);
+				accessory.context.lastPowerChange = new Date().getTime();
+				this.makeRequest(
+					"POST",
+					"Run/devices[" +
+						accessory.context.nodeId +
+						"].instances[0].commandClasses[" +
+						CommandClassIds.SwitchBinary +
+						"].Set(" +
+						0 +
+						")",
+					{},
+					"ZWave.zway",
+				);
+			}
 		});
 	}
 
@@ -542,44 +467,10 @@ class ZWayPumpOutlet implements DynamicPlatformPlugin {
 			if (!this.config.toPoll.includes(pump.nodeId)) {
 				return;
 			}
-			// if (
-			// 	currentTime - this.accessories[lock.nodeId].context.lastConfigurationUpdate >
-			// 	UPDATE_TOLERANCES.configuration
-			// ) {
-			// 	Object.keys(ConfigurationOptions).forEach((name) => {
-			// 		requestsToDispatch.push({
-			// 			device: lock.nodeId,
-			// 			instance: lock.commandClasses.configuration.instance,
-			// 			commandClass: parseInt(CommandClassIds.Configuration as string),
-			// 			time: this.accessories[lock.nodeId].context.lastConfigurationUpdate,
-			// 			param: ConfigurationOptions[name].toString(),
-			// 		});
-			// 	});
-			// 	this.accessories[lock.nodeId].context.lastConfigurationUpdate = currentTime;
-			// }
-			// const batteryTime = lock.lastState.instances[lock.commandClasses.battery.instance]
-			// 	.commandClasses[CommandClassIds.Battery]!;
-			// if (currentTime - batteryTime.data.last.updateTime > UPDATE_TOLERANCES.battery) {
-			// 	requestsToDispatch.push({
-			// 		device: lock.nodeId,
-			// 		instance: lock.commandClasses.battery.instance,
-			// 		commandClass: parseInt(CommandClassIds.Battery as string),
-			// 		time: batteryTime.data.last.updateTime,
-			// 		param: "",
-			// 	});
-			// }
 
-			// const lockTime = lock.lastState.instances[lock.commandClasses.doorLock.instance]
-			// 	.commandClasses[CommandClassIds.DoorLock]! as DoorLockCommandClass;
-			// if (currentTime - lockTime.data.mode.updateTime > UPDATE_TOLERANCES.doorLock) {
-			// 	requestsToDispatch.push({
-			// 		device: lock.nodeId,
-			// 		instance: lock.commandClasses.doorLock.instance,
-			// 		commandClass: parseInt(CommandClassIds.DoorLock as string),
-			// 		time: lockTime.data.mode.updateTime,
-			// 		param: "",
-			// 	});
-			// }
+			this.log.warn(
+				"Use lifeline group and/or update parameter 2 to increase reporting delta instead of polling.",
+			);
 		});
 
 		requestsToDispatch.forEach((request) => {
