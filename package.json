@@ -2,7 +2,7 @@
 	"displayName": "Z-Way Pump Outlet",
 	"name": "homebridge-zway-pump-outlet",
 	"author": "ncovercash",
-	"version": "1.0.0",
+	"version": "2.0.0",
 	"description": "Exposes a smart outlet as an pump for a hydropoinc system.",
 	"license": "Apache-2.0",
 	"repository": {
