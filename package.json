@@ -29,7 +29,7 @@
 		]
 	},
 	"dependencies": {
-		"axios": "^0.28.0",
+		"axios": "^1.0.0",
 		"cookie": "^0.7.0",
 		"fast-array-diff": "^0.2.0"
 	},
