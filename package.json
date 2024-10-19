@@ -30,7 +30,7 @@
 	},
 	"dependencies": {
 		"axios": "^0.28.0",
-		"cookie": "^0.6.0",
+		"cookie": "^0.7.0",
 		"fast-array-diff": "^0.2.0"
 	},
 	"devDependencies": {
