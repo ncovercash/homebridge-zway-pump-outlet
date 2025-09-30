@@ -31,7 +31,7 @@
 	"dependencies": {
 		"axios": "^0.30.0",
 		"cookie": "^0.7.0",
-		"fast-array-diff": "^0.2.0"
+		"fast-array-diff": "^1.0.0"
 	},
 	"devDependencies": {
 		"@types/cookie": "0.6.0",
